@@ -1,0 +1,49 @@
+---
+title: "Get public data from TCGA"
+author: "Min Hyung Ryu"
+email: "remhr@channing.harvard.edu"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    code_folding: hide
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+# Purpose
+
+The purpose of this document is to document how public dataset was download from TCGA that will be used for demonstrating tidyomics package.
+
+The full website of The Cancer Genome Atlas Program can be found: https://www.cancer.gov/ccg/research/genome-sequencing/tcga
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## tidyomics is still in development for bioconductor version 3.18. Therefore, I will install and load packages needed for the demo separately for now. This will be fixed at later date.
+
+library(tidybulk)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
