@@ -51,3 +51,5 @@ rsconnect/
 # Rproject
 EuroBioC2024_tidyomics.Rproj
 
+# System file
+.DS_Store
