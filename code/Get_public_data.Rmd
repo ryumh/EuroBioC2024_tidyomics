@@ -1,7 +1,7 @@
 ---
 title: "Get public data from TCGA"
 author: "Min Hyung Ryu"
-email: "remhr@channing.harvard.edu"
+email: "min.hyung.ryu@ubc.ca"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
   html_document:
@@ -14,36 +14,78 @@ output:
 # Purpose
 
 The purpose of this document is to document how public dataset was download from TCGA that will be used for demonstrating tidyomics package.
-
 The full website of The Cancer Genome Atlas Program can be found: https://www.cancer.gov/ccg/research/genome-sequencing/tcga
 
+A great YouTube video that explains TCGA and how to download data is here: https://youtu.be/UWXv9dUpxNE?si=khLRUN-vxtNMIljv
+A large portion of the data here is open source, so it's a great resource for learning and exploring. 
 
+Bioconductor package 'TCGAbiolinks' is used for getting the data. 
 
+# Analysis
+## Package load
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-## tidyomics is still in development for bioconductor version 3.18. Therefore, I will install and load packages needed for the demo separately for now. This will be fixed at later date.
-
-library(tidybulk)
+library(TCGAbiolinks)
+library(SummarizedExperiment)
+library(maftools)
+library(pheatmap)
+library(tidyverse)
+library(plyr)
 
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+# Get a list of projects
+```{r}
+gdcprojects <- getGDCprojects()
+getProjectSummary('TCGA-LUAD')
 ```
 
-## Including Plots
+# Building a query
+```{r}
+# building a query
 
-You can also embed plots, for example:
+# Gene expression profile (RNA-seq)
+RNAseq_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
+         data.category = 'Transcriptome Profiling',
+                       experimental.strategy = 'RNA-Seq',
+                       workflow.type = 'STAR - Counts',
+                       access = 'open') %>% getResults()
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# DNA methlation profile (450k)
+DNAm_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
+                       data.category = 'DNA Methylation',
+                       platform = 'Illumina Human Methylation 450',
+                       access = 'open',
+                       data.type = "Methylation Beta Value"
+                       ) %>% getResults()
+  
+
+# Find the overlap between methylation and RNA sequencing data
+List_RNAseq_samples <- RNAseq_query_TCGA$cases
+List_DNAm_samples <- DNAm_query_TCGA$cases
+
+# Shorten the sample ID to match between DNA and RNAseq
+List_RNAseq_samples <- substr(List_RNAseq_samples,1,16)
+List_DNAm_samples <- substr(List_DNAm_samples,1,16)
+
+length(unique(List_RNAseq_samples)) # 589 unique samples
+length(unique(List_DNAm_samples)) # 503 unique samples
+
+overlap_samples <- intersect(List_DNAm_samples,List_RNAseq_samples) # this is the list of samples that are present in both RNA and DNA methylation
+length(unique(overlap_samples))
+
+# Subset RNA-seq and DNAm data to those with both RNA-seq and DNAm data
+
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+
+DNAmList <- getResults(DNAm_query_TCGA)
+
+output_query_TCGA <- getResults(query_TCGA)
+
+```
+
