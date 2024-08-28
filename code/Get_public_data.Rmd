@@ -176,7 +176,6 @@ TCGA_DNAm_data <- GDCprepare(final_DNAm_query_TCGA, summarizedExperiment = TRUE)
 ```
 
 # Save data
-
 Saving SummarizedExperiment data to local data folder with a date stamp. 
 ```{r}
 saveRDS(TCGA_DNAm_data, paste0(data_save, "TidyOmicsDemo_TCGA_DNAm_data.Rds"))

@@ -1,0 +1,213 @@
+---
+title: "EuroBioC2024_Tidyomics"
+author: "Min Hyung Ryu"
+email: "min.hyung.ryu@ubc.ca"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    code_folding: hide
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+# Objectives
+
+The goal of this demo is to demonstrate using tidyomics in manipulating data for multiple omics integration.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyomics)
+```
+
+# Data
+
+These data were queried and downloaded from The Cancer Genome Atlas (TCGA) Program, and the research program details can be found: <https://www.cancer.gov/ccg/research/genome-sequencing/tcga>
+
+To reproduce data query and download, refer to `Get_public_data.Rmd` in the code directory.
+
+Data we are calling in are saved as `SummarizedExperiment` object as Rds files.
+
+```{r}
+TCGA_DNAm_data <- readRDS("../data/20240828/20240828_TidyOmicsDemo_TCGA_DNAm_data.Rds")
+TCGA_RNAseq_data <- readRDS("../data/20240828/20240828_TidyOmicsDemo_TCGA_RNAseq_data.Rds")
+
+class(TCGA_DNAm_data)
+class(TCGA_RNAseq_data)
+```
+
+Loading `tidySummarizedExperiment` will automatically abstract this object as tibble, so we can display it and manipulate it with tidy tools. Although it looks different, and more tools (tidyverse) are available to us, this object is in fact a `SummarizedExperiment` object.
+
+```{r}
+TCGA_DNAm_data
+TCGA_RNAseq_data
+
+counts_SE <- TCGA_RNAseq_data |> keep_abundant() # This function reduces eliminates samples with counts that are too low.
+# The default setting is that there needs minimum of 10 counts in at least 70% samples. 
+```
+
+# Analysis 
+
+## Aggregate duplicated `transcripts`
+
+tidybulk provide the aggregate_duplicates function to aggregate duplicated transcripts (e.g., isoforms, ensembl). For example, we often have to convert ensembl symbols to gene/transcript symbol, but in doing so we have to deal with duplicates. aggregate_duplicates takes a tibble and column names (as symbols; for `sample`, `transcript` and `count`) as arguments and returns a tibble with transcripts with the same name aggregated. All the rest of the columns are appended, and factors and boolean are appended as characters.
+
+### TidyTranscriptomics
+
+```{r}
+rowData(counts_SE)$gene_name = rownames(counts_SE)
+counts_SE.aggr = counts_SE |> aggregate_duplicates(.transcript = gene_name)
+```
+
+### Starndard procedure
+For comparitive purpose; do not run
+```{r}
+# temp = data.frame(
+#     symbol = dge_list$genes$symbol,
+#     dge_list$counts
+# )
+# dge_list.nr <- by(temp, temp$symbol,
+#     function(df)
+#         if(length(df[1,1])>0)
+#             matrixStats:::colSums(as.matrix(df[,-1]))
+# )
+# dge_list.nr <- do.call("rbind", dge_list.nr)
+# colnames(dge_list.nr) <- colnames(dge_list)
+```
+
+## Scale `counts`
+We may want to compensate for sequencing depth, scaling the transcript abundance (e.g., with TMM algorithm, Robinson and Oshlack doi.org/10.1186/gb-2010-11-3-r25). `scale_abundance` takes a tibble, column names (as symbols; for `sample`, `transcript` and `count`) and a method as arguments and returns a tibble with additional columns with scaled data as <NAME OF COUNT COLUMN>_scaled.
+
+### TidyTranscriptomics
+```{r}
+counts_SE.norm = counts_SE.aggr |>  identify_abundant(factor_of_interest = primary_diagnosis) |>  scale_abundance()
+```
+
+### Standard procedure
+```{r}
+# library(edgeR)
+# 
+# dgList <- DGEList(count_m=x,group=group)
+# keep <- filterByExpr(dgList)
+# dgList <- dgList[keep,,keep.lib.sizes=FALSE]
+# [...]
+# dgList <- calcNormFactors(dgList, method="TMM")
+# norm_counts.table <- cpm(dgList)
+```
+
+The beauty of tidyOmics is that you can then apply stadnard ggplot function to examine data as you code/analyze.
+```{r}
+counts_SE.norm |>
+    ggplot(aes(unstranded_scaled + 1, group=sample, color=primary_diagnosis)) +
+    geom_density() +
+    scale_x_log10() + 
+    theme_classic()
+```
+
+## Filter `varable transcripts`
+
+In some experiments, we may want to identify an dfilter variable transcripts. Especially, when integrating with methylation data to identify DNAm probe beta value associate with gene expression, we want to make sure we save compute time by filtering to varaible genes. 
+
+In tidyOmics ecosystem, this is achieved very simply
+### TidyTranscriptomics
+```{r}
+counts_SE.norm.variable = counts_SE.norm |> keep_variable()
+```
+
+### Standard procedure
+```{r}
+# library(edgeR)
+# 
+# x = norm_counts.table
+# 
+# s <- rowMeans((x-rowMeans(x))^2)
+# o <- order(s,decreasing=TRUE)
+# x <- x[o[1L:top],,drop=FALSE]
+# 
+# norm_counts.table = norm_counts.table[rownames(x)]
+# 
+# norm_counts.table$cell_type = tibble_counts[
+#     match(
+#         tibble_counts$sample,
+#         rownames(norm_counts.table)
+#     ),
+#     "Cell.type"
+# ]
+```
+
+## PCA
+### TidyTranscriptomics
+```{r}
+counts_SE.norm.PCA =
+  counts_SE.norm |>
+  reduce_dimensions(method="PCA", .dims = 6)
+```
+
+### Standard procedure
+```{r}
+# count_m_log = log(count_m + 1)
+# pc = count_m_log |> prcomp(scale = TRUE)
+# variance = pc$sdev^2
+# variance = (variance / sum(variance))[1:6]
+# pc$cell_type = counts[
+#     match(counts$sample, rownames(pc)),
+#     "primary_diagnosis"
+# ]
+```
+
+Make some graphs using tidyOmics paradigm
+
+```{r}
+# CRAN
+# install.packages("GGally")
+library(GGally)
+
+counts_SE.norm.PCA |> pivot_sample() |> select(contains("PC"), everything())
+
+counts_SE.norm.PCA |>
+     pivot_sample() |>
+  GGally::ggpairs(columns = 93:95, ggplot2::aes(colour=primary_diagnosis))
+
+```
+
+## tSNE
+### TidyTranscriptomics
+```{r}
+counts_SE.norm.tSNE =
+    counts_SE.norm |>
+    identify_abundant() |>
+    reduce_dimensions(
+        method = "tSNE",
+        perplexity=10,
+        pca_scale =TRUE
+    )
+```
+
+### Standard procedure
+```{r}
+# count_m_log = log(count_m + 1)
+# 
+# tsne = Rtsne::Rtsne(
+#     t(count_m_log),
+#     perplexity=10,
+#         pca_scale =TRUE
+# )$Y
+# tsne$cell_type = tibble_counts[
+#     match(tibble_counts$sample, rownames(tsne)),
+#     "Cell.type"
+# ]
+```
+
+```{r}
+counts_SE.norm.tSNE |>
+    pivot_sample() |>
+    select(contains("tSNE"), everything()) 
+
+counts_SE.norm.tSNE |>
+    pivot_sample() |>
+    ggplot(aes(x = `tSNE1`, y = `tSNE2`, color=primary_diagnosis)) + geom_point() + theme_classic()
+
+
+```
+
