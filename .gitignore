@@ -53,3 +53,7 @@ EuroBioC2024_tidyomics.Rproj
 
 # System file
 .DS_Store
+
+# GDC download items
+GDCdata/
+MANIFEST.txt

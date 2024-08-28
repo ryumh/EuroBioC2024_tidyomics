@@ -14,6 +14,7 @@ output:
 # Purpose
 
 The purpose of this document is to document how public dataset was download from TCGA that will be used for demonstrating tidyomics package.
+
 The full website of The Cancer Genome Atlas Program can be found: https://www.cancer.gov/ccg/research/genome-sequencing/tcga
 
 A great YouTube video that explains TCGA and how to download data is here: https://youtu.be/UWXv9dUpxNE?si=khLRUN-vxtNMIljv
@@ -21,10 +22,28 @@ A large portion of the data here is open source, so it's a great resource for le
 
 Bioconductor package 'TCGAbiolinks' is used for getting the data. 
 
+When the following Rmd file is run, this file generates a two RDS files "TidyOmicsDemo_TCGA_DNAm_data.Rds" and "TidyOmicsDemo_TCGA_RNAseq_data.Rds" with date stamp in the current working directory to be used for further analysis.
+
+Make sure that the packages are properly installed on your computer before running the script.
+
 # Analysis
 ## Package load
-```{r setup, include=FALSE}
+```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
+
+## Package installation commands below. 
+
+# if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("TCGAbiolinks")
+# BiocManager::install("SummarizedExperiment")
+# BiocManager::install("maftools")
+# install.packages(pheatmap)
+# install.packages(tidyverse)
+# install.packages(plyr)
+# install.pacakges(here)
+# BiocManager::install("sesameData")
+# BiocManager::install("sesame")
 
 library(TCGAbiolinks)
 library(SummarizedExperiment)
@@ -32,25 +51,47 @@ library(maftools)
 library(pheatmap)
 library(tidyverse)
 library(plyr)
+library(sesameData)
+library(sesame)
+library(here)
 
 ```
 
-# Get a list of projects
+```{r, create a directory for data storage}
+# set date as an object
+currentDate <- format(Sys.Date(), "%Y%m%d")
+
+# set directory
+here::here() # this should be checked
+
+# make directory for results on currentDate
+if(dir.exists(paste0(here::here("data"),"/", currentDate, "/")) == TRUE){
+  print(paste0(here::here("data"),"/", currentDate, "/"))
+} else {
+  dir.create(paste0(here::here("data"),"/", currentDate, "/"), recursive = TRUE)
+}
+
+data_save <- paste0(here::here("data"),"/", currentDate, "/", currentDate, "_")
+```
+
+# TCGA data
+
+## Get a list of projects
 ```{r}
 gdcprojects <- getGDCprojects()
 getProjectSummary('TCGA-LUAD')
 ```
 
-# Building a query
+## Building a query
+Building a query to get the data for DNAm and RNA-seq.
 ```{r}
-# building a query
-
 # Gene expression profile (RNA-seq)
 RNAseq_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
          data.category = 'Transcriptome Profiling',
                        experimental.strategy = 'RNA-Seq',
                        workflow.type = 'STAR - Counts',
-                       access = 'open') %>% getResults()
+                       access = 'open') 
+output_RNAseq_query_TCGA <- getResults(RNAseq_query_TCGA)
 
 # DNA methlation profile (450k)
 DNAm_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
@@ -58,34 +99,91 @@ DNAm_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
                        platform = 'Illumina Human Methylation 450',
                        access = 'open',
                        data.type = "Methylation Beta Value"
-                       ) %>% getResults()
-  
+                       )
 
-# Find the overlap between methylation and RNA sequencing data
-List_RNAseq_samples <- RNAseq_query_TCGA$cases
-List_DNAm_samples <- DNAm_query_TCGA$cases
+output_DNAm_query_TCGA <- getResults(DNAm_query_TCGA)
 
-# Shorten the sample ID to match between DNA and RNAseq
-List_RNAseq_samples <- substr(List_RNAseq_samples,1,16)
-List_DNAm_samples <- substr(List_DNAm_samples,1,16)
+length(unique(output_RNAseq_query_TCGA$sample.submitter_id)) # 589 unique samples
+length(unique(output_DNAm_query_TCGA$sample.submitter_id)) # 503 unique samples
 
-length(unique(List_RNAseq_samples)) # 589 unique samples
-length(unique(List_DNAm_samples)) # 503 unique samples
+overlap_samples <- intersect(output_RNAseq_query_TCGA$sample.submitter_id, output_DNAm_query_TCGA$sample.submitter_id)
+print("Return the number of unique samples with both RNA-seq and DNAm datasets")
+length(unique(overlap_samples)) # 489
 
-overlap_samples <- intersect(List_DNAm_samples,List_RNAseq_samples) # this is the list of samples that are present in both RNA and DNA methylation
-length(unique(overlap_samples))
-
-# Subset RNA-seq and DNAm data to those with both RNA-seq and DNAm data
+sub_sample <- sample(unique(overlap_samples),100) # take only 100 samples
 
 
+## TCGA dataset may contain multiple sample from each donors. So chose only one sample from each person
+
+output_RNAseq_query_TCGA <- output_RNAseq_query_TCGA %>%
+  subset(sample.submitter_id %in% overlap_samples) %>% 
+  distinct(cases.submitter_id, sample.submitter_id, .keep_all = TRUE) %>% 
+  subset(sample.submitter_id %in% sub_sample)
+
+output_DNAm_query_TCGA <- output_DNAm_query_TCGA %>% 
+  subset(sample.submitter_id %in% overlap_samples) %>% 
+  distinct(cases.submitter_id, sample.submitter_id, .keep_all = TRUE) %>% 
+  subset(sample.submitter_id %in% sub_sample)
+
+print("Check that each RNA-seq sample has matching DNAm sample")
+output_DNAm_query_TCGA$sample.submitter_id %in% output_RNAseq_query_TCGA$sample.submitter_id
+
+RNA_cases <- output_RNAseq_query_TCGA$cases
+DNAm_cases <- output_DNAm_query_TCGA$cases
 ```
 
+##  Get the final query and download
+The following query and download is used to download TCGA files to your local directory and to process them to generate a SummarizedExperiment files. 
 
+### RNAseq data
 ```{r}
+# Gene expression profile (RNA-seq)
+final_RNAseq_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
+         data.category = 'Transcriptome Profiling',
+                       experimental.strategy = 'RNA-Seq',
+                       workflow.type = 'STAR - Counts',
+                       access = 'open',
+                       barcode = RNA_cases
+         )
 
-DNAmList <- getResults(DNAm_query_TCGA)
+getResults(final_RNAseq_query_TCGA)
 
-output_query_TCGA <- getResults(query_TCGA)
+# download data - GDCdownload
+GDCdownload(final_RNAseq_query_TCGA)
 
+# prepare data
+TCGA_RNASeq_data <- GDCprepare(final_RNAseq_query_TCGA, summarizedExperiment = TRUE) # this is summarized experiment data
 ```
 
+### DNAm data
+```{r}
+# DNA methylation beta values (DNAm)
+final_DNAm_query_TCGA <- GDCquery(project = 'TCGA-LUAD',
+                       data.category = 'DNA Methylation',
+                       platform = 'Illumina Human Methylation 450',
+                       access = 'open',
+                       data.type = "Methylation Beta Value",
+                       barcode = DNAm_cases
+                       )
+
+getResults(final_DNAm_query_TCGA)
+
+# download data - GDCdownload
+GDCdownload(final_DNAm_query_TCGA)
+
+# prepare data
+TCGA_DNAm_data <- GDCprepare(final_DNAm_query_TCGA, summarizedExperiment = TRUE)
+```
+
+# Save data
+
+Saving SummarizedExperiment data to local data folder with a date stamp. 
+```{r}
+saveRDS(TCGA_DNAm_data, paste0(data_save, "TidyOmicsDemo_TCGA_DNAm_data.Rds"))
+saveRDS(TCGA_RNASeq_data, paste0(data_save, "TidyOmicsDemo_TCGA_RNAseq_data.Rds"))
+```
+
+# Session Info
+```{r session information calling, echo=FALSE}
+sessionInfo()
+```
