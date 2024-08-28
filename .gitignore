@@ -57,3 +57,9 @@ EuroBioC2024_tidyomics.Rproj
 # GDC download items
 GDCdata/
 MANIFEST.txt
+
+# Html file and R object
+Get_public_data.html
+.Rds
+20240828_TidyOmicsDemo_TCGA_DNAm_data.Rds
+20240828_TidyOmicsDemo_TCGA_RNAseq_data.Rds
