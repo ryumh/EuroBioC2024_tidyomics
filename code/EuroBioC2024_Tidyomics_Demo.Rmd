@@ -18,6 +18,11 @@ The goal of this demo is to demonstrate using tidyomics in manipulating data for
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("tidyomics")
+
 library(tidyomics)
 ```
 
