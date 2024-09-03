@@ -216,7 +216,6 @@ counts_SE.norm.tSNE |>
 
 ```
 
-
 # DNAm cleaning
 Source:
 https://www.biostars.org/p/465230/
@@ -240,9 +239,20 @@ table(keep)
 met <- met[keep, ]
 rm(keep) # remove no further needed probes.
 
-
 ```
 
+
+```{r}
+counts_SE.norm.variable@rowRanges %>% 
+  sort() # genomic position sorting
+
+rowRanges(counts_SE.norm.variable) %>% 
+  sort() %>% # genomic position sorting
+  filter(seqnames=="chr12") %>% # pick only the chr12
+  anchor_5p() %>% # anchor 5 prime end
+  mutate(width=1) %>%  # shrink range to 1bp
+  add_nearest_distance(met)
+```
 
 ```{r}
 betaValues_SE <- TCGA_DNAm_data |> keep_abundant()
