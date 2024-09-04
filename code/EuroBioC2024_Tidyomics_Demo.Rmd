@@ -61,8 +61,8 @@ tidybulk provide the aggregate_duplicates function to aggregate duplicated trans
 ### TidyTranscriptomics
 
 ```{r}
-rowData(counts_SE)$gene_name = rownames(counts_SE)
-counts_SE.aggr = counts_SE |> aggregate_duplicates(.transcript = gene_name)
+rowData(counts_SE)$gene_name <- rownames(counts_SE)
+counts_SE.aggr <- counts_SE |> aggregate_duplicates(.transcript = gene_name)
 ```
 
 ### Starndard procedure
@@ -86,7 +86,7 @@ We may want to compensate for sequencing depth, scaling the transcript abundance
 
 ### TidyTranscriptomics
 ```{r}
-counts_SE.norm = counts_SE.aggr |>  identify_abundant(factor_of_interest = primary_diagnosis) |>  scale_abundance()
+counts_SE.norm <- counts_SE.aggr |>  identify_abundant(factor_of_interest = primary_diagnosis) |>  scale_abundance()
 ```
 
 ### Standard procedure
@@ -114,10 +114,11 @@ counts_SE.norm |>
 
 In some experiments, we may want to identify an dfilter variable transcripts. Especially, when integrating with methylation data to identify DNAm probe beta value associate with gene expression, we want to make sure we save compute time by filtering to varaible genes. 
 
-In tidyOmics ecosystem, this is achieved very simply
+In tidyOmics ecosystem, this is achieved very simply.
+
 ### TidyTranscriptomics
 ```{r}
-counts_SE.norm.variable = counts_SE.norm |> keep_variable()
+counts_SE.norm.variable <- counts_SE.norm |> keep_variable()
 ```
 
 ### Standard procedure
@@ -144,7 +145,7 @@ counts_SE.norm.variable = counts_SE.norm |> keep_variable()
 ## PCA
 ### TidyTranscriptomics
 ```{r}
-counts_SE.norm.PCA =
+counts_SE.norm.PCA <-
   counts_SE.norm |>
   reduce_dimensions(method="PCA", .dims = 6)
 ```
@@ -217,45 +218,37 @@ counts_SE.norm.tSNE |>
 ```
 
 # DNAm cleaning
-Source:
-https://www.biostars.org/p/465230/
 
 ```{r}
-met <- as.data.frame(assay(TCGA_DNAm_data))
-probe.na <- rowSums(is.na(met))
-table(probe.na == 0)
 
-probe <- probe.na[probe.na == 0]
-met <- met[row.names(met) %in% names(probe), ]
+# met <- as.data.frame(assay(TCGA_DNAm_data))
+# probe.na <- rowSums(is.na(met))
+# table(probe.na == 0)
+# 
+# ## remove probes with NA
+# probe <- probe.na[probe.na == 0]
+# met <- met[row.names(met) %in% names(probe), ]
 
-#BiocManager::install("IlluminaHumanMethylation450kanno.ilmn12.hg19")
-library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+DNAm_NA_removed <- TCGA_DNAm_data |> 
+  na.omit() |> # remove any row with NA 
+  subset()
+rowRanges(DNAm_NA_removed)
 
-ann450k <- getAnnotation(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+DNAm_NA_removed_chr12 <- rowRanges(DNAm_NA_removed) |>
+  sort() |> # genomic position sorting
+  filter(seqnames=="chr12") # pick only the chr12 for computation efficiency
 
-## remove probes that match chromosomes X and Y 
-keep <- !(row.names(met) %in% ann450k$Name[ann450k$chr %in% c("chrX","chrY")])
-table(keep)
-met <- met[keep, ]
-rm(keep) # remove no further needed probes.
-
+DNAm_NA_removed_chr12
 ```
 
+## Look for DNAm site linked with genes
 
+Here is a strategy to look for DNAm site located inside the most variable genes
 ```{r}
-counts_SE.norm.variable@rowRanges %>% 
-  sort() # genomic position sorting
 
-rowRanges(counts_SE.norm.variable) %>% 
-  sort() %>% # genomic position sorting
-  filter(seqnames=="chr12") %>% # pick only the chr12
-  anchor_5p() %>% # anchor 5 prime end
-  mutate(width=1) %>%  # shrink range to 1bp
-  add_nearest_distance(met)
-```
+# the following looks for methylation site that are inside 500 most variable genes in our dataset.
 
-```{r}
-betaValues_SE <- TCGA_DNAm_data |> keep_abundant()
+DNAm_with_VariableGenes <- join_overlap_inner(DNAm_NA_removed_chr12, counts_SE.norm.variable@rowRanges)
 
 ```
 
